@@ -1,120 +1,113 @@
 #include <iostream>
 #include <fstream>
 #include <vector>
-#include <algorithm>
+#include <string>
+#include <limits>
+#include <stdexcept>
 
-struct Task_WiTi
-{
+namespace witi {
+
+struct Task {
     int index;
-    int P, W, D;
+    int processing_time;
+    int weight;
+    int deadline;
 };
 
-std::vector<Task_WiTi> read_tasks(const std::string &filename, const std::string &dataname)
-{
+std::vector<Task> read_tasks(const std::string& filename, const std::string& dataname) {
     std::ifstream file(filename);
-
-    if (!file.is_open())
-    {
+    if (!file.is_open()) {
         throw std::runtime_error("Unable to open the file.");
     }
 
     std::string line;
-    while (getline(file, line) && line != dataname)
-        ;
-
-    int vector_length;
-    std::vector<Task_WiTi> tasks_vector;
-    if (!(file >> vector_length))
-    {
-        throw std::runtime_error("Error reading vector length.");
+    while (getline(file, line) && line != dataname) {
+        // Skip to the specified data section
     }
 
-    for (int i = 1; i < vector_length + 1; ++i)
-    {
-        Task_WiTi task;
-        if (file >> task.P >> task.W >> task.D)
-        {
-            task.index = i;
-            tasks_vector.push_back(task);
-        }
-        else
-        {
+    int task_count;
+    file >> task_count;
+    if (file.fail()) {
+        throw std::runtime_error("Error reading task count.");
+    }
+
+    std::vector<Task> tasks(task_count);
+    for (int i = 0; i < task_count; ++i) {
+        file >> tasks[i].processing_time >> tasks[i].weight >> tasks[i].deadline;
+        tasks[i].index = i + 1;
+        if (file.fail()) {
             throw std::runtime_error("Error reading task data.");
         }
     }
-    return tasks_vector;
+    return tasks;
 }
 
-void print_tasks_order(std::vector<Task_WiTi> &tasks_vector)
-{
-    std::cout << "Task Index: ";
-    for (size_t i = 0; i < tasks_vector.size(); i++)
-    {
-        std::cout << tasks_vector[i].index << " ";
+void print_order(const std::vector<int>& order) {
+    std::cout << "Order of tasks: ";
+    for (int index : order) {
+        std::cout << index << " ";
     }
     std::cout << std::endl;
 }
 
-void print_tasks_order(std::vector<int> &order)
-{
-    std::cout << "Task Index: ";
-    for (size_t i = 0; i < order.size(); i++)
-    {
-        std::cout << order[i] << " ";
-    }
-    std::cout << std::endl;
+void print_results(int dataset_number, int cost, const std::vector<int>& order) {
+    std::cout << "Dataset " << dataset_number << ":\n";
+    std::cout << "Minimum cost: " << cost << std::endl;
+    print_order(order);
+    std::cout << "-----------------------------------\n";
 }
 
-std::pair<int, std::vector<int>> calculate_sum_witi(std::vector<Task_WiTi> &tasks_vector)
-{
-    int n = tasks_vector.size();
-    std::vector<int> cost_table(1 << n, 99999);
-    std::vector<std::vector<int>> order_table(1 << n);
+std::pair<int, std::vector<int>> calculate_minimum_cost(const std::vector<Task>& tasks) {
+    const int num_tasks = tasks.size();
+    const int num_subsets = 1 << num_tasks;
+
+    std::vector<int> cost_table(num_subsets, std::numeric_limits<int>::max());
+    std::vector<std::vector<int>> order_table(num_subsets);
+
     cost_table[0] = 0;
 
-    for (size_t i = 1; i < (1 << n); i++)
-    {
-        int C = 0;
-        for (size_t j = 0, b = 1; j < n; j++, b *= 2)
-            if (i & b)
-                C += tasks_vector[j].P;
+    for (int subset = 1; subset < num_subsets; ++subset) {
+        int current_time = 0;
+        for (int j = 0; j < num_tasks; ++j) {
+            if (subset & (1 << j)) {
+                current_time += tasks[j].processing_time;
+            }
+        }
 
-        for (size_t j = 0, b = 1; j < n; j++, b *= 2)
-        {
-            if (i & b)
-            {
-                int temp_cost = cost_table[i - b] + tasks_vector[j].W * std::max(0, C - tasks_vector[j].D);
-                if (temp_cost < cost_table[i])
-                {
-                    cost_table[i] = temp_cost;
-                    order_table[i] = order_table[i - b];
-                    order_table[i].push_back(tasks_vector[j].index);
+        for (int j = 0; j < num_tasks; ++j) {
+            if (subset & (1 << j)) {
+                int previous_subset = subset & ~(1 << j);
+                int lateness = std::max(0, current_time - tasks[j].deadline);
+                int temp_cost = cost_table[previous_subset] + tasks[j].weight * lateness;
+                
+                if (temp_cost < cost_table[subset]) {
+                    cost_table[subset] = temp_cost;
+                    order_table[subset] = order_table[previous_subset];
+                    order_table[subset].push_back(tasks[j].index);
                 }
             }
         }
     }
-    return {cost_table[(1 << n) - 1], order_table[(1 << n) - 1]};
+    return {cost_table[num_subsets - 1], order_table[num_subsets - 1]};
 }
 
-int main()
-{
-    try
-    {
-        for(int i = 10; i <= 20; i++) 
-        {
+void process_datasets(int start, int end, const std::string& filename) {
+    for (int i = start; i <= end; ++i) {
+        try {
             std::string data_id = "data." + std::to_string(i) + ":";
-            std::vector<Task_WiTi> tasks_vector = read_tasks("data.txt", data_id);
-            //print_tasks_order(tasks_vector);
-            auto [cost, order] = calculate_sum_witi(tasks_vector);
-            //print_tasks_order(order);
-            std::cout << "Data " + std::to_string(i) << " cost: " << cost << std::endl;
+            auto tasks = read_tasks(filename, data_id);
+            auto [cost, order] = calculate_minimum_cost(tasks);
+            print_results(i, cost, order);
+        } catch (const std::exception& ex) {
+            std::cerr << "Exception occurred while processing dataset " << i << ": " << ex.what() << std::endl;
         }
     }
-    catch (const std::exception &ex)
-    {
-        std::cerr << "Exception occurred: " << ex.what() << std::endl;
-    }
-
-    return 0;
 }
 
+} // namespace witi
+
+int main() {
+    const std::string filename = "data.txt";
+    witi::process_datasets(10, 20, filename);
+    return 0;
+}
