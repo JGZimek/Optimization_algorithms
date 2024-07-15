@@ -1,75 +1,14 @@
 #include <iostream>
-#include <fstream>
-#include <vector>
-#include <algorithm>
-#include <stdexcept>
-#include <string>
-#include <limits>
 #include <iomanip>
+#include <vector>
+#include <stdexcept>
+#include <algorithm>  // For std::sort and std::max
+#include <limits>     // For std::numeric_limits
+#include "task_loader.h"
 
 namespace neh {
 
-struct Task {
-    int index;
-    std::vector<int> processing_times;
-    int total_processing_time = 0;
-};
-
-std::vector<Task> read_tasks(const std::string& filename, const std::string& dataname) {
-    std::ifstream file(filename);
-    if (!file.is_open()) {
-        throw std::runtime_error("Unable to open the file.");
-    }
-
-    std::string line;
-    bool data_section_found = false;
-
-    // Szukaj sekcji danych
-    while (getline(file, line)) {
-        if (line.find(dataname) != std::string::npos) {
-            data_section_found = true;
-            break;
-        }
-    }
-
-    if (!data_section_found) {
-        throw std::runtime_error("Data section not found: " + dataname);
-    }
-
-    int rows, cols;
-    file >> rows >> cols;
-    if (file.fail()) {
-        throw std::runtime_error("Error reading rows and columns.");
-    }
-
-    std::vector<Task> tasks(rows);
-    for (int i = 0; i < rows; ++i) {
-        tasks[i].index = i + 1;
-        tasks[i].processing_times.resize(cols);
-        for (int j = 0; j < cols; ++j) {
-            file >> tasks[i].processing_times[j];
-            tasks[i].total_processing_time += tasks[i].processing_times[j];
-        }
-        if (file.fail()) {
-            throw std::runtime_error("Error reading task data.");
-        }
-    }
-    return tasks;
-}
-
-void print_tasks(const std::vector<Task>& tasks) {
-    std::cout << std::left << std::setw(8) << "Task"
-              << std::setw(20) << "Processing Times"
-              << std::setw(10) << "Total" << std::endl;
-    std::cout << "---------------------------------------------------" << std::endl;
-    for (const auto& task : tasks) {
-        std::cout << std::left << std::setw(8) << task.index << " ";
-        for (const auto& time : task.processing_times) {
-            std::cout << std::setw(2) << time << " ";
-        }
-        std::cout << std::right << std::setw(10) << task.total_processing_time << std::endl;
-    }
-}
+using Task = Task_NEH;
 
 int calculate_cmax(const std::vector<Task>& tasks) {
     int num_tasks = tasks.size();
@@ -121,6 +60,30 @@ std::vector<Task> neh_algorithm(std::vector<Task> tasks) {
     return sorted_tasks;
 }
 
+void print_combined_tasks(const std::vector<Task>& initial_tasks, const std::vector<Task>& sorted_tasks) {
+    std::cout << std::left << std::setw(8) << "Task"
+              << std::setw(30) << "Initial Processing Times"
+              << std::setw(10) << "Total"
+              << std::setw(30) << "Sorted Processing Times"
+              << std::setw(10) << "Total" << std::endl;
+    std::cout << "-------------------------------------------------------------------------------------------------------------" << std::endl;
+    for (size_t i = 0; i < initial_tasks.size(); ++i) {
+        const auto& init_task = initial_tasks[i];
+        const auto& sorted_task = sorted_tasks[i];
+
+        std::cout << std::left << std::setw(8) << init_task.index;
+        for (const auto& time : init_task.processing_times) {
+            std::cout << std::setw(2) << time << " ";
+        }
+        std::cout << std::right << std::setw(10) << init_task.total_processing_time << "     ";
+
+        for (const auto& time : sorted_task.processing_times) {
+            std::cout << std::setw(2) << time << " ";
+        }
+        std::cout << std::right << std::setw(10) << sorted_task.total_processing_time << std::endl;
+    }
+}
+
 void print_result_header(const std::string& header) {
     std::cout << "===================================================" << std::endl;
     std::cout << header << std::endl;
@@ -132,10 +95,10 @@ void process_dataset(const std::string& filename, int dataset_number) {
     oss << "data." << std::setw(3) << std::setfill('0') << dataset_number << ":";
     std::string data_id = oss.str();
     
-    auto tasks = read_tasks(filename, data_id);
+    auto tasks = TaskLoader::read_tasks_neh(filename, data_id);
 
     print_result_header("Initial tasks for dataset " + std::to_string(dataset_number));
-    print_tasks(tasks);
+    print_combined_tasks(tasks, tasks);
 
     int initial_cmax = calculate_cmax(tasks);
     std::cout << "Initial C_max: " << initial_cmax << "\n\n";
@@ -143,7 +106,7 @@ void process_dataset(const std::string& filename, int dataset_number) {
     auto sorted_tasks = neh_algorithm(tasks);
 
     print_result_header("Sorted tasks for dataset " + std::to_string(dataset_number));
-    print_tasks(sorted_tasks);
+    print_combined_tasks(tasks, sorted_tasks);
 
     int sorted_cmax = calculate_cmax(sorted_tasks);
     std::cout << "Sorted C_max: " << sorted_cmax << "\n";
@@ -163,7 +126,7 @@ void process_datasets(const std::string& filename, int start, int end) {
 
 int main() {
     try {
-        const std::string filename = "data.txt";
+        const std::string filename = "../data/data_neh.txt"; // relative path to the data file
         neh::process_datasets(filename, 0, 10);
     } catch (const std::exception& ex) {
         std::cerr << "Exception occurred: " << ex.what() << std::endl;
